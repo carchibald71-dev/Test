@@ -150,6 +150,81 @@
       color: #aaa;
       border: 1px solid #333;
     }
+
+    /* Lab popup */
+    #lab-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.55);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s;
+    }
+
+    #lab-overlay.show {
+      opacity: 1;
+      pointer-events: all;
+    }
+
+    #lab-card {
+      background: #16213e;
+      border-radius: 20px;
+      padding: 1.2rem 1.4rem 1rem;
+      max-width: 320px;
+      width: 90vw;
+      text-align: center;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.6);
+      transform: scale(0.85);
+      transition: transform 0.25s;
+    }
+
+    #lab-overlay.show #lab-card {
+      transform: scale(1);
+    }
+
+    #lab-verdict {
+      font-size: 1.1rem;
+      font-weight: bold;
+      margin-bottom: 0.7rem;
+      line-height: 1.3;
+    }
+
+    #lab-img {
+      width: 100%;
+      height: 220px;
+      object-fit: cover;
+      border-radius: 12px;
+      background: #0f3460;
+    }
+
+    #lab-caption {
+      margin-top: 0.7rem;
+      font-size: 0.9rem;
+      color: #aaa;
+      font-style: italic;
+    }
+
+    #lab-close {
+      margin-top: 0.9rem;
+      background: #e94560;
+      color: #fff;
+      padding: 0.5rem 1.4rem;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    #lab-close:hover { opacity: 0.85; }
+
+    .rating-good { color: #4cff91; }
+    .rating-mid  { color: #f0c040; }
+    .rating-bad  { color: #ff6060; }
   </style>
 </head>
 <body>
@@ -164,7 +239,7 @@
       </div>
       <div class="score-box" style="min-width:60px;">
         <div class="label">Draws</div>
-        <div class="symbol" style="color:#aaa">—</div>
+        <div class="symbol" style="color:#aaa">&#8212;</div>
         <div class="count" id="score-draw">0</div>
       </div>
       <div class="score-box o">
@@ -194,6 +269,16 @@
     </div>
   </div>
 
+  <div id="lab-overlay">
+    <div id="lab-card">
+      <div id="lab-verdict"></div>
+      <img id="lab-img" src="" alt="A very opinionated Labrador">
+      <div id="lab-caption"></div>
+      <br>
+      <button id="lab-close">OK, got it</button>
+    </div>
+  </div>
+
   <script>
     const cells = document.querySelectorAll('.cell');
     const status = document.getElementById('status');
@@ -202,15 +287,101 @@
     const scoreDraw = document.getElementById('score-draw');
 
     const WIN_LINES = [
-      [0,1,2],[3,4,5],[6,7,8], // rows
-      [0,3,6],[1,4,7],[2,5,8], // cols
-      [0,4,8],[2,4,6]          // diagonals
+      [0,1,2],[3,4,5],[6,7,8],
+      [0,3,6],[1,4,7],[2,5,8],
+      [0,4,8],[2,4,6]
     ];
 
     let board = Array(9).fill(null);
     let currentPlayer = 'X';
     let gameOver = false;
     let scores = { X: 0, O: 0, draw: 0 };
+
+    const RATINGS = {
+      win: {
+        cls: 'rating-good',
+        verdicts: ['WINNING MOVE!', 'GENIUS PLAY!', 'UNSTOPPABLE!'],
+        captions: [
+          'The Lab is going absolutely berserk with excitement.',
+          'This dog has never been prouder of a human.',
+          'Maximum tail wags. Maximum zoomies. Outstanding.',
+        ]
+      },
+      block: {
+        cls: 'rating-good',
+        verdicts: ['NICE BLOCK!', 'GOOD DEFENCE!', 'WELL SPOTTED!'],
+        captions: [
+          'The Lab gives an approving head-tilt.',
+          'A solid defensive play. The dog is cautiously impressed.',
+          'Smart. The Lab rewards you with a single bork.',
+        ]
+      },
+      center: {
+        cls: 'rating-good',
+        verdicts: ['BOLD CHOICE!', 'CLASSIC OPENER!', 'STRATEGIC!'],
+        captions: [
+          'The Lab nods wisely. The center is always a good call.',
+          'Classic. The Lab would have done the same.',
+          'Textbook move. The dog approves.',
+        ]
+      },
+      corner: {
+        cls: 'rating-mid',
+        verdicts: ['DECENT MOVE.', 'NOT BAD.', 'OKAY, SURE.'],
+        captions: [
+          'The Lab sniffs the air thoughtfully.',
+          'Could be worse. The dog reserves judgement.',
+          'The Lab tilts its head. Jury is still out.',
+        ]
+      },
+      edge: {
+        cls: 'rating-bad',
+        verdicts: ['YIKES.', 'REALLY?', 'THE EDGE?? BOLD.'],
+        captions: [
+          'The Lab looks genuinely concerned for you.',
+          'The dog stares at you with quiet disappointment.',
+          "Edges are the Lab's least favourite squares. Just saying.",
+        ]
+      }
+    };
+
+    function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+
+    function wouldWin(b, idx, player) {
+      const copy = [...b];
+      copy[idx] = player;
+      return WIN_LINES.some(([a, x, c]) => copy[a] === player && copy[x] === player && copy[c] === player);
+    }
+
+    function rateMove(idx, player) {
+      if (wouldWin(board, idx, player)) return RATINGS.win;
+      const opp = player === 'X' ? 'O' : 'X';
+      if (wouldWin(board, idx, opp)) return RATINGS.block;
+      if (idx === 4) return RATINGS.center;
+      if ([0,2,6,8].includes(idx)) return RATINGS.corner;
+      return RATINGS.edge;
+    }
+
+    const overlay  = document.getElementById('lab-overlay');
+    const labImg   = document.getElementById('lab-img');
+    const verdict  = document.getElementById('lab-verdict');
+    const caption  = document.getElementById('lab-caption');
+    const closeBtn = document.getElementById('lab-close');
+
+    closeBtn.addEventListener('click', () => overlay.classList.remove('show'));
+    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.classList.remove('show'); });
+
+    function showLab(rating) {
+      verdict.textContent = pick(rating.verdicts);
+      verdict.className = 'rating-cls ' + rating.cls;
+      caption.textContent = pick(rating.captions);
+      labImg.src = '';
+      fetch('https://dog.ceo/api/breed/labrador/images/random')
+        .then(r => r.json())
+        .then(data => { labImg.src = data.message; })
+        .catch(() => { labImg.src = ''; });
+      overlay.classList.add('show');
+    }
 
     function setStatus(msg, cls) {
       status.innerHTML = msg;
@@ -235,11 +406,10 @@
     function handleClick(e) {
       const idx = +e.target.dataset.index;
       if (gameOver || board[idx]) return;
-
+      const rating = rateMove(idx, currentPlayer);
       board[idx] = currentPlayer;
       e.target.textContent = currentPlayer;
       e.target.classList.add('taken', currentPlayer.toLowerCase());
-
       const result = checkWinner();
       if (result) {
         gameOver = true;
@@ -253,12 +423,13 @@
         } else {
           scores.draw++;
           scoreDraw.textContent = scores.draw;
-          setStatus('It\'s a draw!');
+          setStatus("It's a draw!");
         }
       } else {
         currentPlayer = currentPlayer === 'X' ? 'O' : 'X';
         updateTurnStatus();
       }
+      showLab(rating);
     }
 
     function restart() {
